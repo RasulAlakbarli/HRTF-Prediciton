@@ -1,0 +1,12 @@
+numpy
+pandas
+matplotlib
+kaggle
+sofar
+imageio
+opencv-python
+pyav
+seaborn
+pysofaconventions
+torchsummary
+tensorboard
