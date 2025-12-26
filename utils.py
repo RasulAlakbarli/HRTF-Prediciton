@@ -7,30 +7,20 @@ import math
 import cv2
 from typing import Dict, List, Tuple
 import glob
-import numpy as np
-import torchvision.transforms as transforms
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 import torch.nn.functional as F
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset
 from PIL import Image
 from pysofaconventions import SOFAFile
 import matplotlib.pyplot as plt  
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.nn import MultiheadAttention
 from imageio.v3 import imread
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 import torchvision.transforms.functional as TF
-from PIL import Image
-import torch
 from torchvision.models import resnet50, ResNet50_Weights
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 
