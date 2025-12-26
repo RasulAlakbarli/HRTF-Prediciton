@@ -81,11 +81,6 @@ class HRTFModel(nn.Module):
         batch_size, sides, views = x.size(0), x.size(1), x.size(2)
         resnet_out = self.resnet_encoder(x)  # Shape: [batch_size, sides * views, 2048]
 
-        ### THIS IS USELESS! LSTM CAN HANDLE VARIABLE LENGTH INPUTS ###
-        ### FIX THIS! ###
-        if sides * views != 6:
-            resnet_out = F.adaptive_avg_pool1d(resnet_out.permute(0, 2, 1), 6).permute(0, 2, 1)
-
         o, (h, _) = self.lstm(resnet_out)
         summary = torch.cat((h[-2], h[-1]), dim=-1)
         summary = summary.unsqueeze(1)
