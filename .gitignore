@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Datasets and model weights are not distributed with this repository (see README).
+data/
+*.pth
+*.sofa
+!assets/*.sofa
+.venv/
+venv/

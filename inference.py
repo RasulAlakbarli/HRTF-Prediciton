@@ -11,7 +11,7 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from utils import SonicomDatabase, save_sofa
+from utils import SonicomDatabase, all_tasks, save_sofa
 from transformations import ConsistentTransform
 from model import HRTFModel 
 from metrics import MeanSpectralDistortion
@@ -20,7 +20,7 @@ from metrics import MeanSpectralDistortion
 AVG_HRTF_PATH = "data/Average_HRTFs.sofa"
 
 
-class BaselineHRTFPredictor:
+class HRTFPredictor:
     def __init__(self, average_hrtf_path: str = AVG_HRTF_PATH):
         """
         Creates a predictor instance. 
@@ -42,10 +42,10 @@ class BaselineHRTFPredictor:
         Predict the HRTF based on left and right images.
 
         Args:
-            images: images for left and right pinna as 4-dimensional tensor of size (number of ears, number of images per ear, image height, image width)
+            images: batched pinna views as a tensor of size (batch, ears, views, 1, height, width)
 
         Returns:
-            sofar.Sofa: Predicted HRIR in SOFA format.
+            torch.Tensor: predicted HRIRs of shape (batch, 793, 2, 256).
         """
 
         with torch.no_grad():
@@ -61,7 +61,7 @@ def evaluate():
     
     val_transforms = ConsistentTransform(image_size=(256, 256), apply_augmentation=False)
 
-    predictor = BaselineHRTFPredictor()
+    predictor = HRTFPredictor()
     metric = MeanSpectralDistortion()
     results = {}
 
@@ -77,9 +77,9 @@ def evaluate():
             total_error.append(metric.get_spectral_distortion(hrtf_batch, predicted_hrtf))
         results[task] = np.mean(total_error)
 
-    print("Average Mean Spectral Distortion for Task 1: ", results[0])
-    print("Average Mean Spectral Distortion for Task 2: ", results[1])
-    print("Average Mean Spectral Distortion for Task 3: ", results[2])
+    for task, score in results.items():
+        print(f"Average Mean Spectral Distortion for Task {task} "
+              f"({len(all_tasks[task])} images per ear): {score}")
 
 
 def main():
@@ -96,7 +96,7 @@ def main():
     transforms.Normalize(mean=[0.5], std=[0.5]),
     ])
 
-    parser = argparse.ArgumentParser(description="Baseline HRTF Inference Script")
+    parser = argparse.ArgumentParser(description="HRTF Inference Script")
     parser.add_argument("-l", "--left", metavar='IMAGE_PATH', type=str, nargs='+', required=True, help="List of left pinna images")
     parser.add_argument("-r", "--right", metavar='IMAGE_PATH', type=str, nargs='+', required=True, help="List of right pinna images")
     parser.add_argument("-o", "--output_path", metavar='SOFA_PATH', type=str, required=True, help="File path to save the predicted HRTF in SOFA format.")
@@ -111,7 +111,7 @@ def main():
     images = images.unsqueeze(0)  # Shape: [1, 2, 19, 1, 256, 256]
 
     # predict HRTFs
-    predictor = BaselineHRTFPredictor()
+    predictor = HRTFPredictor()
     hrir_sofa = predictor.predict(images).squeeze(0).cpu().numpy()
 
     # Use the average HRTF template as a base

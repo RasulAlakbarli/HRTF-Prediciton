@@ -1,9 +1,5 @@
-import sys
-import sofar
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from torchvision.models import resnet50, ResNet50_Weights
 

@@ -1,103 +1,88 @@
-import random  # Ensure random is imported
-import matplotlib.pyplot as plt
-import torch
-import numpy as np
-from typing import List, Tuple
-from PIL import Image
-import torch.nn as nn
-import torchvision.transforms as transforms
-from utils import SonicomDatabase
-import sofar
+"""Overlay a predicted HRTF against the measured ground truth for one subject."""
 
-epsilon = 1e-10
+import argparse
+
+import matplotlib.pyplot as plt
+import numpy as np
+import sofar
+import torchvision.transforms as transforms
+
+from utils import SonicomDatabase
+
+NFFT = 256
+SAMPLING_RATE_HZ = 48000
+
 
 def plot_prediction_for_id(
-    patient_id: str,
+    subject_id: str,
+    predicted_sofa_path: str,
     root_dir: str,
     transforms: transforms.Compose,
-    task_id: int = 1
+    task_id: int = 1,
 ):
     """
-    Generates and displays a comparison plot between predicted and reference HRTFs for a specific patient.
+    Plot the direction-averaged magnitude response of a predicted HRTF against the
+    measured one for a given subject.
 
     Args:
-        patient_id (str): The unique ID of the patient (e.g., 'P0002').
-        model (nn.Module): Trained HRTF prediction model.
-        root_dir (str): Root directory where the dataset is located.
-        device (torch.device): Device to perform computations on ('cuda' or 'cpu').
-        transforms (transforms.Compose): Transformation pipeline to preprocess images.
-        task_id (int, optional): Task identifier determining the image subset. Defaults to 1.
+        subject_id (str): Subject ID, e.g. 'P0004'.
+        predicted_sofa_path (str): SOFA file written by inference.py for this subject.
+        root_dir (str): Dataset root directory.
+        transforms (transforms.Compose): Preprocessing pipeline for the pinna images.
+        task_id (int): Which image subset the prediction was made from (0, 1 or 2).
     """
-    # Initialize the dataset in evaluation mode (training_data=False)
     dataset = SonicomDatabase(
         root_dir=root_dir,
         training_data=False,
         transforms=transforms,
-        task_id=task_id
+        task_id=task_id,
     )
-    predicted_sofa = sofar.read_sofa("predicted_hrtf_P0004.sofa", verbose=False).Data_IR
-    predicted_sofa = np.fft.rfft(predicted_sofa, n=256)
-    print(predicted_sofa.shape)
 
-    pred_hrtf_avg_left = np.mean(predicted_sofa[:, 0, :], axis=0)
-    pred_hrtf_avg_right = np.mean(predicted_sofa[:, 1, :], axis=0)
+    if subject_id not in dataset.all_subjects:
+        raise SystemExit(f"Subject {subject_id} not found in {root_dir}")
 
-    pred_hrtf_avg = (pred_hrtf_avg_left+pred_hrtf_avg_right)/2
-    
+    predicted_hrir = sofar.read_sofa(predicted_sofa_path, verbose=False).Data_IR
+    predicted_hrtf = np.fft.rfft(predicted_hrir, n=NFFT)
 
-    
-    # Check if the patient_id exists in the dataset
-    if patient_id not in dataset.all_subjects:
-        print(f"Patient ID {patient_id} not found in the dataset.")
-        return
-    
-    # Get the index of the patient_id
-    idx = dataset.all_subjects.index(patient_id)
-    
-    # Retrieve images and HRTF for the specified patient
-    images, hrtf = dataset[idx]  # images: [2, num_images, 1, H, W], hrtf: [directions, 2, freq_bins]
-    
-    hrtf_reference = hrtf
-    print(predicted_sofa.shape)
-    print(hrtf_reference.shape)
-   
-    # Assuming hrtf_reference is of shape [directions, 2, freq_bins]
-    freq_bins = hrtf_reference.shape[2]
-    directions = hrtf_reference.shape[0]
+    _, reference_hrtf = dataset[dataset.all_subjects.index(subject_id)]
 
-    # Create a frequency axis for plotting
-    frequency_axis = np.linspace(0, 0.5, freq_bins)  # Adjust according to your frequency range
+    # Average the magnitude response over all directions and both ears.
+    predicted_avg = np.abs(predicted_hrtf).mean(axis=(0, 1))
+    reference_avg = np.abs(np.asarray(reference_hrtf)).mean(axis=(0, 1))
+
+    frequency_axis = np.linspace(0, SAMPLING_RATE_HZ / 2, reference_avg.shape[-1]) / 1000
 
     plt.figure(figsize=(12, 6))
-    
-    # Average across all directions for both left and right channels
-    hrtf_avg_left = np.mean(hrtf_reference[:, 0, :], axis=0)
-    hrtf_avg_right = np.mean(hrtf_reference[:, 1, :], axis=0)
-
-    hrtf_avg = (hrtf_avg_left+hrtf_avg_right)/2
-
-    # Plot the averaged HRTF
-
-    print("truth shape", hrtf_avg.shape)
-    print("pred shape", pred_hrtf_avg.shape)
-    plt.plot(frequency_axis, 20 * np.log10(np.abs(hrtf_avg)), label='ground truth')
-    plt.plot(frequency_axis, 20 * np.log10(np.abs(pred_hrtf_avg)), label='predicted')
-
-    plt.title(f'HRTF Frequency Response for Patient ID: {patient_id}')
-    plt.xlabel('Frequency (normalized)')
-    plt.ylabel('Magnitude (dB)')
+    plt.plot(frequency_axis, 20 * np.log10(reference_avg), label="measured")
+    plt.plot(frequency_axis, 20 * np.log10(predicted_avg), label="predicted")
+    plt.title(f"Direction-averaged HRTF magnitude — subject {subject_id} (task {task_id})")
+    plt.xlabel("Frequency (kHz)")
+    plt.ylabel("Magnitude (dB)")
     plt.legend()
     plt.grid()
     plt.show()
 
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("-s", "--subject", default="P0004", help="Subject ID, e.g. P0004")
+    parser.add_argument("-p", "--predicted", default="predicted_hrtf_P0004.sofa",
+                        help="Predicted SOFA file for this subject")
+    parser.add_argument("--root_dir", default="data/", help="Dataset root directory")
+    parser.add_argument("-t", "--task_id", type=int, default=2, choices=[0, 1, 2],
+                        help="Image subset used for the prediction")
+    args = parser.parse_args()
 
     val_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5], std=[0.5]),
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5]),
     ])
 
-    plot_prediction_for_id("P0004",
-                           root_dir = "dataset/", transforms = val_transforms,
-                           task_id = 2)
+    plot_prediction_for_id(
+        subject_id=args.subject,
+        predicted_sofa_path=args.predicted,
+        root_dir=args.root_dir,
+        transforms=val_transforms,
+        task_id=args.task_id,
+    )

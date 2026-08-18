@@ -1,30 +1,14 @@
-
-
 import os
-import sofar
-import numpy as np
-import math
-import cv2
-from typing import Dict, List, Tuple
 import glob
+from typing import List, Tuple
+
+import cv2
+import numpy as np
+import sofar
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset, TensorDataset
-import torch.nn.functional as F
 import torchvision.transforms as transforms
-from PIL import Image
-from pysofaconventions import SOFAFile
-import matplotlib.pyplot as plt  
-from torch.utils.tensorboard import SummaryWriter
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from imageio.v3 import imread
-
-import torchvision.transforms.functional as TF
-from torchvision.models import resnet50, ResNet50_Weights
-from torchvision.models import vit_b_16, ViT_B_16_Weights
-
-import torchvision.models as models
+from PIL import Image
 
 
 all_tasks = [np.arange(19).tolist(), np.arange(19, step=3).tolist(), [3, 6, 9]]
@@ -150,9 +134,11 @@ class SonicomDatabase(torch.utils.data.Dataset):
         Returns:
             List of image name
         """
-        return [
+        # Sorted so that the view sequence handed to the cross-view LSTM follows the
+        # capture order rather than an arbitrary filesystem order.
+        return sorted(
             x for x in os.listdir(self.image_dir) if f"{id}" in x and not x.startswith(".")
-        ]  # glob.glob(os.path.join(self.image_dir, f'{id}*'))
+        )
 
     def get_available_ids(self) -> List[str]:
         """
